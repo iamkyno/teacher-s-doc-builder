@@ -47,6 +47,18 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        ribbon: {
+          DEFAULT: "hsl(var(--ribbon))",
+          foreground: "hsl(var(--ribbon-foreground))",
+          hover: "hsl(var(--ribbon-hover))",
+          active: "hsl(var(--ribbon-active))",
+        },
+        canvas: "hsl(var(--canvas))",
+        page: "hsl(var(--page))",
+        panel: {
+          DEFAULT: "hsl(var(--panel))",
+          border: "hsl(var(--panel-border))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -65,20 +77,12 @@ export default {
       },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
         },
       },
       animation: {
