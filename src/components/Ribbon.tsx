@@ -57,7 +57,7 @@ export function Ribbon() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-3 py-1.5 flex-wrap">
+      <div className="flex items-center gap-1 px-2 md:px-3 py-1.5 flex-wrap">
         {/* Font size */}
         <select
           value={selected?.formatting.fontSize ?? 12}

@@ -129,12 +129,59 @@
     color: hsl(var(--marks-badge-foreground));
   }
 
+  .page-a4 {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 20mm 15mm;
+    background: hsl(var(--page));
+    box-shadow: 0 2px 12px hsl(var(--page-shadow));
+    position: relative;
+  }
+
+  @media (max-width: 767px) {
+    .page-a4 {
+      width: 100%;
+      min-height: auto;
+      padding: 4mm 3mm;
+    }
+  }
+
   @media print {
     .no-print { display: none !important; }
+
+    body {
+      background: white !important;
+    }
+
     .page-a4 {
-      box-shadow: none;
+      box-shadow: none !important;
+      margin: 0 !important;
+      padding: 15mm !important;
+      width: 210mm !important;
+      min-height: 297mm !important;
+      page-break-after: always;
+      break-after: page;
+    }
+
+    .page-a4:last-child {
+      page-break-after: avoid;
+    }
+
+    .doc-component {
+      border: none !important;
+      background: none !important;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* Avoid breaking inside question blocks */
+    .doc-component + .doc-component {
+      page-break-before: auto;
+    }
+
+    @page {
+      size: A4;
       margin: 0;
-      padding: 15mm;
     }
   }
 }
