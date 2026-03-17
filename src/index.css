@@ -101,6 +101,16 @@
     background: hsl(var(--page));
     box-shadow: 0 2px 12px hsl(var(--page-shadow));
     position: relative;
+    /* Visual page break indicators */
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent calc(297mm - 1px),
+      hsl(var(--destructive) / 0.3) calc(297mm - 1px),
+      hsl(var(--destructive) / 0.3) 297mm
+    );
+    background-size: 100% 297mm;
+    background-position: top;
   }
 
   .drag-component {
@@ -158,13 +168,9 @@
       margin: 0 !important;
       padding: 15mm !important;
       width: 210mm !important;
-      min-height: 297mm !important;
-      page-break-after: always;
-      break-after: page;
-    }
-
-    .page-a4:last-child {
-      page-break-after: avoid;
+      min-height: auto !important;
+      background-image: none !important;
+      background: white !important;
     }
 
     .doc-component {
@@ -172,11 +178,6 @@
       background: none !important;
       page-break-inside: avoid;
       break-inside: avoid;
-    }
-
-    /* Avoid breaking inside question blocks */
-    .doc-component + .doc-component {
-      page-break-before: auto;
     }
 
     @page {
