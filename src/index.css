@@ -101,6 +101,16 @@
     background: hsl(var(--page));
     box-shadow: 0 2px 12px hsl(var(--page-shadow));
     position: relative;
+    /* Visual page break indicators */
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent calc(297mm - 1px),
+      hsl(var(--destructive) / 0.3) calc(297mm - 1px),
+      hsl(var(--destructive) / 0.3) 297mm
+    );
+    background-size: 100% 297mm;
+    background-position: top;
   }
 
   .drag-component {
