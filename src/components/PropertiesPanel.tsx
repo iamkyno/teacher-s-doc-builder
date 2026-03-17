@@ -9,7 +9,7 @@ export function PropertiesPanel() {
 
   if (!selected) {
     return (
-      <div className="no-print w-56 border-l border-panel-border bg-panel p-4">
+      <div className="no-print w-56 max-md:w-60 border-l border-panel-border bg-panel p-4 h-full">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           Properties
         </h3>
