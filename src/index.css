@@ -168,13 +168,9 @@
       margin: 0 !important;
       padding: 15mm !important;
       width: 210mm !important;
-      min-height: 297mm !important;
-      page-break-after: always;
-      break-after: page;
-    }
-
-    .page-a4:last-child {
-      page-break-after: avoid;
+      min-height: auto !important;
+      background-image: none !important;
+      background: white !important;
     }
 
     .doc-component {
@@ -182,11 +178,6 @@
       background: none !important;
       page-break-inside: avoid;
       break-inside: avoid;
-    }
-
-    /* Avoid breaking inside question blocks */
-    .doc-component + .doc-component {
-      page-break-before: auto;
     }
 
     @page {
