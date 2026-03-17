@@ -382,8 +382,8 @@ export function PageCanvas() {
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-canvas p-8 flex justify-center" onClick={() => selectComponent(null)}>
-      <div className="page-a4" onClick={(e) => e.stopPropagation()}>
+    <div className="flex-1 overflow-auto bg-canvas p-4 md:p-8 flex justify-center" onClick={() => selectComponent(null)}>
+      <div className="page-a4 max-md:scale-[0.85] max-md:origin-top" onClick={(e) => e.stopPropagation()}>
         {components.length === 0 && (
           <div
             className="h-full flex items-center justify-center border-2 border-dashed border-border rounded-lg"
