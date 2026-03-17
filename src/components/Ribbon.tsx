@@ -37,7 +37,7 @@ export function Ribbon() {
   return (
     <div className="no-print flex flex-col border-b border-panel-border bg-panel">
       {/* Title bar */}
-      <div className="flex items-center gap-3 px-4 py-1.5 bg-ribbon">
+      <div className="flex items-center gap-2 md:gap-3 px-2 md:px-4 py-1.5 bg-ribbon">
         <FileText className="h-5 w-5 text-ribbon-foreground" />
         <input
           value={title}
@@ -57,7 +57,7 @@ export function Ribbon() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-3 py-1.5 flex-wrap">
+      <div className="flex items-center gap-1 px-2 md:px-3 py-1.5 flex-wrap">
         {/* Font size */}
         <select
           value={selected?.formatting.fontSize ?? 12}

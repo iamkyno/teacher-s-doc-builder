@@ -31,7 +31,7 @@ export function ComponentsSidebar() {
   };
 
   return (
-    <div className="no-print w-60 border-r border-panel-border bg-panel flex flex-col overflow-y-auto">
+    <div className="no-print w-60 max-md:w-64 border-r border-panel-border bg-panel flex flex-col overflow-y-auto h-full">
       {/* Templates */}
       <div className="p-3 border-b border-panel-border">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
