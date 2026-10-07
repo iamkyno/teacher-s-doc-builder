@@ -23,8 +23,9 @@ out automatically.
 
 ### Usability principles (what the prototype got wrong)
 
-1. **One continuous document.** Typing, Enter, Backspace, selection, copy/paste all work across
-   blocks — no isolated text boxes.
+1. **Real pages, natural typing.** The teacher works on separate A4 sheets. Content that doesn't
+   fit moves to the next page automatically, with a clear indication. Typing, Enter, Backspace,
+   selection and copy/paste work across blocks and across pages, with no isolated text boxes.
 2. **Nothing manual that can be computed.** Numbering, mark totals, page count, cognitive-level
    analysis are always derived, never typed.
 3. **What you see is what prints.** The editor shows real A4 pages; PDF and print use the same
@@ -93,7 +94,7 @@ teacher-paper-builder/
 │   │       └── server.ts
 │   └── worker/              # BullMQ consumers: pdf, docx, thumbnails
 ├── packages/
-│   ├── shared/              # doc schema, zod API schemas, CAPS numbering/marks engine
+│   ├── shared/              # doc schema, zod API schemas, CAPS numbering/marks engine, page break engine, geometry
 │   ├── docx-export/         # ProseMirror JSON → .docx
 │   └── config/              # eslint, tsconfig, tailwind presets
 ├── docker-compose.yml       # postgres, redis, minio, mailpit
@@ -308,19 +309,110 @@ Computed by `packages/shared/engine` from the doc on every change:
   ribbon is optional for common actions.
 - **Accessibility**: full keyboard navigation, ARIA labels on ribbon, focus rings, 4.5:1 contrast.
 
-### 6.4 Pagination
+### 6.4 Pages & content-aware flow
 
-- A ProseMirror plugin measures top-level block heights against A4 content height (from Layout
-  margins) and inserts **page-gap widget decorations**. The document stays one flow; only the view
-  is split into pages.
-- Keep-together rules:
-  - a question stem stays with its first part
-  - an MCQ never splits
-  - answer lines may split
-  - images and tables never split unless taller than a page
-- Print/PDF use CSS paged media with the **same fonts (self-hosted)**, same widths and same
-  `break-inside` rules, so breaks match. A visual regression test compares editor breaks with PDF
-  output.
+The teacher always works on **separate A4 sheets**, like Word's Print Layout view. When something
+doesn't fit on a page, it moves to the next page automatically, and the app shows clearly what
+moved and why.
+
+**Pages flow into each other.** The teacher sees separate sheets, but the content behind them is
+one ordered list of questions. That is what lets content move between pages: if page 2 grows,
+whatever no longer fits slides onto page 3, and if something is deleted, content from page 3 moves
+back up. Word works the same way. If each page were stored as its own box, the teacher would have
+to move overflow by hand.
+
+#### What the teacher sees
+
+| Indicator | What it looks like |
+|---|---|
+| **Separate sheets** | White A4 pages with a shadow and a grey gap between them; margins, header and footer areas visible; page number in the gap |
+| **Automatic page break** | A small "↓ moved to next page" marker in the margin where content was pushed over. Hovering explains why, e.g. "Question 4 (12 lines) didn't fit in the 38 mm left on page 2" |
+| **Manual page break** | A labelled bar "Page break" across the page, which can be deleted or dragged |
+| **Free space on a page** | The empty area at the bottom of each page is lightly shaded with a label such as "38 mm free". This shows at a glance whether another question would fit |
+| **Page fill meter** | A thin bar beside each page thumbnail showing how full the page is |
+| **Continued question** | Bottom of page: "Question 3 continues on the next page →". Top of the next page: "↳ Question 3 (continued)". Editor-only by default; can also be printed |
+| **Before it moves** | While typing, if the current block is about to be pushed to the next page, its outline turns amber with the hint "will move to page 4", so the jump is never a surprise |
+| **Smooth reflow** | Content slides to its new page with a short animation, and the cursor stays where the teacher is typing |
+| **Page thumbnails** | A Pages tab in the left panel with live thumbnails; click to jump, drag a thumbnail to move a page's questions |
+
+#### How content splits across pages (break rules)
+
+Every block type declares how it may be split:
+
+| Block | Rule |
+|---|---|
+| MCQ, True/False, short question, marks box, image, cover page | **Never split**; move whole to the next page |
+| Paragraph text | Splits between lines, with at least 2 lines left at the bottom and carried to the top (widow/orphan control) |
+| Answer lines | Split by line; the continuation keeps the same line spacing |
+| Table | Splits between rows; the **header row repeats** on the next page |
+| Reading passage | Splits between lines; **line numbers continue** (so "line 23" in a question still matches) |
+| List | Splits between items |
+
+**Keep-with-next rules** (automatic):
+
+- a section heading always stays with its first question
+- a question stem always stays with its first sub-question
+- an image always stays with its caption
+- a page never ends with only a heading on it
+
+**Question split policy.** Set a default for the whole paper and override it per question:
+
+1. *Never split a question*: the whole question moves to the next page.
+2. *Split only between sub-questions* (CAPS default): 3.2 can start on the next page, but 3.2 itself
+   never splits.
+3. *Split anywhere*: the most compact layout.
+
+If a block is taller than a whole page (e.g. a very long passage), it is split anyway and the
+Paper check shows a warning.
+
+#### Smart suggestions when a break leaves a gap
+
+When content is pushed over and leaves a big empty space (more than 25% of the page), a suggestion
+chip appears in the gap. Each option shows its result as a preview before applying, and is one undo
+step:
+
+> Page 2 has 62 mm empty because Question 4 didn't fit.
+> • Allow Question 4 to split between sub-questions
+> • Reduce Question 3's answer lines from 8 to 6 (fits)
+> • Shrink the diagram in Question 4 by 10% (fits)
+> • Fill the space with answer lines for Question 3
+> • Leave as is
+
+#### Page-aware blocks
+
+- **Answer lines "fill to end of page"**: the number of lines adjusts automatically to fill the rest
+  of the page, which is ideal for essay questions.
+- **Start on new page**, per section or question, with an optional "start on an odd page" setting
+  for double-sided printing.
+- **Floating objects** anchored to a question move with it to the next page; page-pinned objects
+  stay put (section 7.1).
+- **Headers and footers per page**: different first page (cover), "Please turn over" on every page
+  except the last, "Page X of Y" (section 8.2).
+
+#### How the page engine works
+
+1. **Measure**: after fonts and images have loaded, each block's height is measured, and for
+   splittable blocks, the positions of its line or row boundaries. A ResizeObserver re-measures
+   only the blocks that change.
+2. **Break**: a pure function in `packages/shared/layout`:
+   - **Input**: block heights, split points, break rules, page size and margins
+   - **Output**: a **page map**, i.e. which block (or part of a block) starts on which page
+   - Fully unit-tested with fixture papers
+3. **Render**: the page map is drawn as page-gap widgets between blocks (the bottom of page N, the
+   grey gap, the top of page N+1 with its header). For mid-block splits, the block's own view
+   splits itself at the given line or row. The cursor, selection and undo work normally across
+   pages because the text is never cut into separate documents.
+4. **Incremental**: only pages from the changed block onwards are re-calculated, inside an
+   animation frame, so typing stays instant on a 20-page paper.
+
+**Print and PDF use the same page map.** The render route applies forced page breaks exactly where
+the editor broke, instead of letting the browser decide. As a result, the PDF has exactly the same
+pages as the screen. The DOCX export inserts the same breaks as Word page breaks (an option the
+teacher can switch off if they plan to edit heavily in Word).
+
+**Build or buy**: TipTap offers a paid "Pages" extension. Phase 2 starts with a one-week trial of it
+against these rules (mid-block splits, repeated table headers, continued labels, shared page map
+for PDF). If it can't do them, we build our own engine as described above.
 
 ### 6.5 Modes
 
@@ -508,8 +600,8 @@ shown as (P1)–(P6).
   set), MCQ option columns and image sizes to reach a target page count. It shows a before/after
   preview before applying.
 - **Automatic answer space** (P3): a rule such as "2 lines per mark", with per-question overrides.
-- **Page control per question** (P2): keep together, start on new page, keep with next; widow and
-  orphan control.
+- **Page control per question** (P2): split policy, start on new page, fill-to-end-of-page answer
+  lines, gap suggestions (section 6.4).
 - **CAPS print conventions, automatic** (P2):
   - "Please turn over" at the foot of every page except the last
   - "Page X of Y"
@@ -732,7 +824,7 @@ client is generated from the same schemas, so a contract mismatch is a compile e
 
 | Level | What |
 |---|---|
-| Unit (Vitest) | Numbering engine, marks engine, cognitive analysis, docx mapping, schema migrations, permission helper |
+| Unit (Vitest) | Numbering engine, marks engine, page break engine (split rules, keep-with-next, split policy), cognitive analysis, docx mapping, schema migrations, permission helper |
 | API integration | Each route against a real Postgres (Testcontainers), auth flows, 409 conflicts |
 | Editor | Command tests: Tab/Shift-Tab nesting, paste conversion, marks shortcut |
 | E2E (Playwright) | Create paper from template → edit → autosave → reload → export PDF/DOCX |
@@ -766,11 +858,14 @@ section 8 refer to these phases.
   numbering and totals are always correct after reordering; closing the tab loses nothing.**
 
 ### Phase 2 — Pages, styles & export
-- Pagination plugin, `coverPage`, page control per question (keep together, new page)
+- Page engine (section 6.4): separate sheets, break rules, split policy, continued labels, moved
+  markers, free-space shading, gap suggestions, page thumbnails; `coverPage`
 - Layout tab: margins, header/footer, page numbers, CAPS print conventions
 - Named styles, format painter, find & replace
 - Render route, PDF worker, DOCX exporter, print
-- **The PDF and print output match the on-screen pages; the DOCX opens cleanly in Word with marks
+- **Typing into a full page pushes the overflowing question to the next page with a clear marker
+  and no cursor jump; a 20-page paper re-paginates without visible lag; the PDF has exactly the same
+  page breaks as the screen; the DOCX opens cleanly in Word with marks
   aligned at the right margin.**
 
 ### Phase 3 — Layout & arrangement
@@ -836,7 +931,8 @@ section 8 refer to these phases.
 
 | Risk | Mitigation |
 |---|---|
-| Editor page breaks drift from PDF breaks | Same fonts/CSS, a shared measurement algorithm, visual regression tests; PDF is the authority for the page count |
+| Editor page breaks drift from PDF breaks | The PDF uses the editor's page map as forced breaks; self-hosted fonts; visual regression tests compare editor pages with PDF pages |
+| Page engine is complex (mid-block splits, incremental re-layout) | Break logic is a pure, unit-tested function; only blocks we control split mid-way; time-boxed trial of TipTap Pages before building our own |
 | ProseMirror learning curve / custom node complexity | Build the numbering engine as pure functions first (fully unit-tested), keep node views thin |
 | DOCX fidelity (maths, complex tables) | Phase 2 covers core nodes; maths via MathML→OMML in Phase 4; document known limits |
 | Chromium in production is heavy | Separate worker container, concurrency limit, export cache |
