@@ -32,6 +32,11 @@ out automatically.
 4. **Never lose work.** Autosave, version history, offline draft buffer.
 5. **Keyboard first, mouse friendly.** Slash menu, shortcuts, plus a familiar ribbon.
 6. **Tablet usable.** Panels collapse into drawers; touch-friendly targets.
+7. **Place anything, anywhere — precisely.** Boxes, images and labels can be dragged freely, with
+   snapping to margins, grid, guides and other objects, so things line up without effort.
+8. **Show me it's neat.** The app can prove a page is aligned and consistent, and tidy it in one
+   click.
+9. **Structure survives layout.** Moving things around never breaks numbering, marks or the memo.
 
 ---
 
@@ -107,6 +112,8 @@ teacher-paper-builder/
 | Client data | TanStack Query; Zustand for UI-only state | Server cache vs. local UI state kept separate |
 | Routing | React Router | Already in use |
 | Maths | KaTeX (render), MathLive (input) | Fast, print-quality formulas |
+| Move / resize / rotate | **Moveable** + **Selecto** (daybrush) | Drag, resize, rotate, marquee multi-select, snap guidelines, gap snapping |
+| Geometry & snapping | Own pure-TS engine in `packages/shared/geometry` | Deterministic, unit-tested, same maths in editor and print |
 | API | **Fastify** + `fastify-type-provider-zod` | Fast, typed request/response validation |
 | DB | **PostgreSQL 16** + **Drizzle ORM** | JSONB for documents, full-text search for question bank |
 | Auth | Own implementation: argon2id + server-side sessions | Full control, no vendor lock-in |
@@ -165,6 +172,15 @@ versioned with `schemaVersion` so old documents can be migrated.
 "Figure x"), `math` (inline/block), `textPassage` (boxed reading text with line numbers),
 `callout`.
 
+**Layout** (see section 7)
+
+| Node | Purpose |
+|---|---|
+| `layoutRow` + `layoutColumn` | Side-by-side blocks inside the flow (e.g. diagram beside its question, Column A/B). Column widths in % with snap presets |
+| `floatingObject` | A freely positioned box (text box, image, shape, label, marks box, stamp). Stored as a child of the block it is anchored to, so it moves when that block moves |
+| `pageLayer` | Holds objects pinned to a page (`page: 3`) or to every page (logo, watermark) |
+| `guide` | A user ruler guide (horizontal/vertical, position in mm), stored in `paperMeta.guides` |
+
 ### 5.2 Example JSON
 
 ```json
@@ -185,6 +201,29 @@ versioned with `schemaVersion` so old documents can be migrated.
   ]
 }
 ```
+
+A floating label anchored to a question part:
+
+```json
+{
+  "type": "floatingObject",
+  "attrs": {
+    "id": "fo_31c",
+    "kind": "textBox",
+    "anchor": { "to": "block", "offset": { "x": 120.0, "y": 4.5 } },
+    "size": { "w": 40.0, "h": 12.0 },
+    "rotation": 0,
+    "z": 2,
+    "wrap": "inFront",
+    "locked": false,
+    "style": { "border": "1pt solid", "fill": null, "padding": 2, "radius": 1 }
+  },
+  "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Label A" }] }]
+}
+```
+
+All positions and sizes are in **millimetres** (0.1 mm precision), never pixels, so zoom, screen
+size and print never change where things sit.
 
 ### 5.3 Derived values (never stored)
 
@@ -212,16 +251,19 @@ Computed by `packages/shared/engine` from the doc on every change:
 ### 6.1 Layout
 
 ```
-┌ Title · autosave status · Share · Export ▾ · Account ──────────────────┐
-├ Ribbon tabs: Home | Insert | Questions | Layout | Review | View ───────┤
-├────────────┬───────────────────────────────────────────┬──────────────┤
-│ Outline /  │                                           │ Inspector    │
-│ Blocks /   │            A4 page view                   │ (selected    │
-│ Bank       │      (real pages, zoom 50–200%)           │  block)      │
-│ (tabs)     │                                           │ Paper check  │
-├────────────┴───────────────────────────────────────────┴──────────────┤
-│ Status bar: page 2 of 6 · 150 marks · words · Student ▸ Memo toggle   │
-└───────────────────────────────────────────────────────────────────────┘
+┌ Title · autosave status · Share · Export ▾ · Account ──────────────────────┐
+├ Ribbon: Home | Insert | Questions | Arrange | Layout | Review | View ──────┤
+├────────────┬──┬─────────────────────────────────────────┬─────────────────┤
+│ Outline /  │  │ ┌ top ruler (mm, margins, indents) ────┐│ Inspector       │
+│ Blocks /   │ l│ │                                       ││ (selected block │
+│ Bank       │ e│ │        A4 page view                   ││  or object:     │
+│ (tabs)     │ f│ │  (real pages, zoom 25–400%,           ││  X/Y/W/H, anchor│
+│            │ t│ │   guides, grid, smart guides)         ││  wrap, marks…)  │
+│            │  │ │                                       ││ Paper check     │
+│            │  │ └───────────────────────────────────────┘│ Alignment check │
+├────────────┴──┴─────────────────────────────────────────┴─────────────────┤
+│ Status: p.2/6 · 150 marks · Snap ▾ · Write|Arrange · Student|Memo · 100%  │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Left panel tabs**:
@@ -239,9 +281,10 @@ Computed by `packages/shared/engine` from the doc on every change:
 | Home | Undo/redo, font, size, B/I/U, colour, align, lists, clear formatting |
 | Insert | Image, table, maths, text passage, page break, symbols |
 | Questions | Question, sub-question, MCQ, True/False, match columns, blank, answer lines/box/grid, memo |
-| Layout | Margins, orientation, header/footer, page numbers, columns for MCQ options, line spacing |
-| Review | Paper check, cognitive grid, mark summary, spell check |
-| View | Zoom, student/memo mode, show page breaks, outline |
+| Arrange | Text box, shape, label, side-by-side row · align (left/centre/right/top/middle/bottom) · "align to" Selection/Margins/Page · distribute · match size · group/lock · bring forward/send back · anchor & wrap |
+| Layout | Margins, orientation, header/footer, page numbers, columns for MCQ options, line spacing, density, fit to pages |
+| Review | Paper check, alignment check, tidy up, cognitive grid, mark summary, spell check, comments |
+| View | Zoom, student/memo/variant preview, rulers, grid, guides, margins, bounding boxes, formatting marks (¶), snap toggles, Write/Arrange mode |
 
 ### 6.3 Interaction details
 
@@ -260,7 +303,9 @@ Computed by `packages/shared/engine` from the doc on every change:
   - `Ctrl+Shift+M` memo mode
 - **Paste from Word/Google Docs**: cleaned to allowed nodes; numbered lists like `1.1` optionally
   converted to `questionPart`.
-- **Drag handles** on every block; drop indicator lines.
+- **Drag handles** on every block; drop indicator lines (full detail in section 7).
+- **Floating toolbar** next to the selection (bold, marks, lines, level, move up/down), so the
+  ribbon is optional for common actions.
 - **Accessibility**: full keyboard navigation, ARIA labels on ribbon, focus rings, 4.5:1 contrast.
 
 ### 6.4 Pagination
@@ -286,9 +331,252 @@ Computed by `packages/shared/engine` from the doc on every change:
 
 ---
 
-## 7. Backend
+## 7. Layout & arrangement system
 
-### 7.1 Database schema (PostgreSQL)
+Word-style flow is best for typing; teachers also need to place things exactly where they want
+them. The editor combines **three layout layers**, each with the right kind of movement:
+
+| Layer | What lives there | How it moves |
+|---|---|---|
+| **Flow** | Questions, text, tables, answer space | Drag to reorder; reflows across pages; auto-numbered |
+| **Layout rows** | Side-by-side blocks in the flow: diagram beside question, MCQ options in a 2×2 grid, Column A / Column B | Drop a block onto the side of another to make a row; drag the divider; widths snap to 50/50, 33/67, 25/75 |
+| **Floating objects** | Text boxes, images, shapes, arrows, diagram labels, marks boxes, logos, stamps, "For examiner use" grids, watermarks | Free move / resize / rotate with snapping and alignment tools |
+
+**Rule that keeps the paper safe:** numbered questions always live in the flow. Floating objects
+are decoration and annotation, so moving them can never break numbering, marks or the memo.
+
+### 7.1 Floating objects
+
+- **Anchor** (shown as a small ⚓ while selected; drag it to re-anchor):
+  - *To a block* (default): the object moves with its question when content reflows to another
+    page.
+  - *To a page*: fixed position on page N (e.g. an "Official use" box on page 1).
+  - *To every page*: repeated art, watermark, "DRAFT" stamp.
+- **Text wrap**:
+  - *In front of text* / *Behind text*: no effect on the flow.
+  - *Top & bottom*: the flow is pushed below the object.
+  - *Square left/right*: text runs beside the object (Phase 5; it is the hardest to get exactly
+    right in both the editor and PDF).
+- **Properties** (Inspector): X, Y, W, H in mm/cm/in, rotation, 9-point reference anchor, z-order,
+  lock, opacity, border, fill, padding, corner radius.
+- **Content**: text boxes hold paragraphs, maths, images and tables, but not numbered questions.
+- **Safety**:
+  - Deleting a block that has anchored objects asks whether to delete them too or re-anchor them
+    to the page.
+  - A page-pinned object whose page no longer exists moves to the last page, with a warning.
+
+### 7.2 Selecting & moving
+
+| Action | Mouse / touch | Keyboard |
+|---|---|---|
+| Select | Click / tap | `Tab` cycles objects in Arrange mode |
+| Multi-select | Shift/Ctrl-click; marquee drag from empty page space | `Ctrl+A` (all objects on page, Arrange mode) |
+| Move | Drag | Arrows = 0.5 mm, `Shift`+arrows = 5 mm |
+| Duplicate | `Alt`+drag | `Ctrl+D` |
+| Resize | 8 handles; `Shift` keeps proportions; `Alt` resizes from centre | Inspector W/H |
+| Rotate | Rotation handle, snaps to 15° (`Shift` = free) | Inspector |
+| Cancel a drag | `Esc` mid-drag returns the object to where it started | |
+| Group / ungroup | Context menu | `Ctrl+G` / `Ctrl+Shift+G` |
+| Lock / unlock | Lock icon | `Ctrl+L` |
+| Reorder flow blocks | Drag ⋮⋮ handle (a whole question moves with its sub-parts); drag in Outline | `Alt+↑ / Alt+↓` |
+| Make a side-by-side row | Drop a block on the left/right edge of another | Arrange → "Place side by side" |
+
+**Write mode vs Arrange mode** (toggle in the status bar, `Ctrl+Shift+A`):
+
+- *Write mode* (default) is for typing. Floating objects can still be moved.
+- *Arrange mode* turns off text editing. Every block shows its outline and handles, so on a tablet
+  a finger drag always moves the box instead of selecting text by accident.
+
+### 7.3 Snapping
+
+Each snap target can be switched on or off from the **Snap ▾** popover in the status bar and from
+the View tab. Settings are remembered per user.
+
+| Snap to | What it does |
+|---|---|
+| **Margins** | Page content edges and the binding gutter |
+| **Page centre** | Horizontal and vertical centre lines |
+| **Grid** | Default 5 mm (1–20 mm); can be shown as faint dots |
+| **Ruler guides** | User guides dragged out of the rulers |
+| **Objects** (smart guides) | Edges and centres of nearby objects and flow blocks |
+| **Equal spacing** | Shows `=` markers when gaps between three or more objects match, and snaps to equal spacing |
+| **Text lines** | Aligns a label with the baseline of a question line or answer line |
+| **Columns** | Layout-row dividers and the marks column |
+
+Behaviour:
+
+- The snap distance is 4 screen pixels at any zoom, so snapping feels the same at 50% and 200%.
+- Coloured guide lines appear while dragging, along with **distance labels in mm** to the nearest
+  margin and neighbours.
+- Holding `Alt` while dragging turns snapping off temporarily; `Ctrl+;` switches all snapping on
+  or off.
+- The snapping maths is a pure function, `snap(rect, targets, threshold) → { rect, guides }`, in
+  `packages/shared/geometry`, with full unit tests.
+
+### 7.4 Align, distribute & size
+
+Arrange tab and right-click menu:
+
+- **Align**: left, centre, right, top, middle, bottom.
+- **Align to**: *Selection* | *Margins* | *Page*, like Word's "Align to" option. With one object
+  selected, it aligns to the margins.
+- **Distribute** horizontally or vertically (equal gaps).
+- **Match** width, height or both, using the first selected object.
+- **Position presets**: a 9-point grid (top-left … bottom-right of the margins).
+- Flow blocks: block alignment (left/centre/right) and indent steps that snap to the grid.
+
+### 7.5 Rulers & guides
+
+- **Top and left rulers** in mm (cm or inches optional). Margins are shaded and can be **dragged
+  to change the page margins**, like in Word.
+- With a block selected, the top ruler shows **indent markers** (first line, hanging) and **tab
+  stops**, so the marks column can be set by clicking the ruler.
+- **Guides**:
+  - Drag from a ruler to create a guide.
+  - Double-click a guide to type an exact position.
+  - Guides can be locked or cleared.
+  - Ready-made guides: "Marks column" (right margin − 15 mm), "Number column" (left margin
+    + 10 mm), "Centre".
+- Guides are saved with the document and also apply in templates.
+
+### 7.6 Alignment check ("Is everything in line?")
+
+Toggle **View → Show alignment**, or run **Review → Alignment check**:
+
+- **Edge map**: thin coloured lines show every distinct left and right edge used on the page.
+  Edges within 3 mm of each other that are not exactly equal are highlighted amber as "almost
+  aligned", which is where things look untidy.
+- **Checks**:
+  - question numbers not on the same indent
+  - marks not sitting in the marks column
+  - answer lines with different start points or lengths in the same question
+  - MCQ options not lined up
+  - objects crossing the margins, going off the page, or overlapping text by mistake
+  - uneven spacing between questions
+  - mixed font sizes for the same role (e.g. two sizes of question text)
+  - images below 150 dpi at print size
+- Each issue appears in the panel. Clicking it jumps to the spot and highlights it.
+- **Fix** (one issue) and **Tidy up** (all issues) snap each item to the nearest consistent value.
+  Every fix is one undo step.
+
+### 7.7 Implementation notes
+
+- **Overlay**: each page gets an absolutely positioned overlay layer above the editor content.
+  Floating objects are drawn there in mm, scaled by zoom. Moveable handles drag, resize, rotate and
+  snap; Selecto handles marquee selection.
+- **One undo history**: during a drag, the position lives only in temporary UI state. On drop, it
+  is committed as **one ProseMirror transaction**. As a result:
+  - one drag = one undo step
+  - the document stays the single source of truth
+  - it works with real-time co-editing later
+- **Print fidelity**: the print/PDF render places objects using the same mm values in CSS, and the
+  DOCX export writes them as Word anchored frames and images with absolute positions.
+- **Performance**: snap targets come only from the current and neighbouring pages and are indexed
+  in a simple spatial grid, so dragging stays at 60 fps on long papers.
+
+---
+
+## 8. Usability toolkit (beyond Word)
+
+Features chosen because teachers keep doing these jobs by hand. The phase each one lands in is
+shown as (P1)–(P6).
+
+### 8.1 Speed
+
+- **Command palette** `Ctrl+K` (P1): every action is searchable, e.g. "add 4 answer lines", "MCQ
+  in 2 columns", "export memo", "go to question 5".
+- **Type-to-format shortcuts** (P1):
+  - `1.` at line start → question
+  - `a)` → MCQ options
+  - `(3)` → marks
+  - `___` → blank
+  - `---` → page break
+- **Styles** (P2): named styles (Question text, Instruction, Passage, Heading). Change a style once
+  and every block using it updates. **Format painter** included.
+- **Bulk edit in the Outline** (P5): select several questions, then set marks or cognitive level,
+  move them to a section, save them to the bank, or delete them.
+- **Import an existing paper** (P5): upload a .docx (or paste from Word). The importer finds
+  questions, numbering, marks and MCQ options and turns them into blocks. A review screen shows
+  what was detected before anything is applied.
+- **Find & replace** across the paper and memo (P2).
+
+### 8.2 Making it fit
+
+- **Density slider** (P3), compact ↔ spacious: adjusts spacing between questions and answer-line
+  height across the whole paper.
+- **Fit to N pages** (P3): automatically adjusts spacing, answer-line counts (within limits you
+  set), MCQ option columns and image sizes to reach a target page count. It shows a before/after
+  preview before applying.
+- **Automatic answer space** (P3): a rule such as "2 lines per mark", with per-question overrides.
+- **Page control per question** (P2): keep together, start on new page, keep with next; widow and
+  orphan control.
+- **CAPS print conventions, automatic** (P2):
+  - "Please turn over" at the foot of every page except the last
+  - "Page X of Y"
+  - a blank page reading "This page was intentionally left blank" inserted when needed to give an
+    even page count for double-sided printing
+
+### 8.3 Many versions from one document
+
+These are previews and exports, not copies, so editing the paper updates all of them.
+
+| Variant | What changes |
+|---|---|
+| Student paper (P2) | Memos hidden |
+| Memorandum (P5) | Answers, ticks and mark allocation shown; "MEMORANDUM" cover |
+| Answer sheet (P5) | MCQ bubble grid plus numbered answer boxes, on a separate sheet |
+| Large print (P5) | E.g. 18 pt, wider line spacing, larger answer space; layout reflows automatically |
+| Dyslexia-friendly (P5) | Readable font, extra spacing, optional cream background |
+| Low-ink (P3) | Fills removed and greyscale-safe borders, with a warning for colour-only meaning |
+| Version A / B (P6) | Question order and/or option order shuffled; the memo follows the shuffle |
+
+### 8.4 Print-smart
+
+- **Print preview** (P3): two-page spreads for double-sided printing, greyscale preview, and the
+  photocopier safe zone (warning when something sits within 5 mm of the paper edge).
+- **Booklet and 2-up** (P6): A5 fold-over booklet with pages in the correct folding order, or two
+  pages per sheet.
+- **Copies calculator** (P3): learners × pages → sheets and reams needed.
+
+### 8.5 Diagram tools
+
+- **Label tool** (P4):
+  - click a point on an image to add a leader line and a label box
+  - labels letter themselves (A, B, C…) and line up neatly in a label column
+  - the memo version fills in the answers
+- **Shapes and arrows** (P4) with snapping. Image crop, rotate and flip (P4).
+- **Generators** (P5): number line, axes/graph grid, fraction strips, tally table, all with
+  settings in the Inspector.
+
+### 8.6 Confidence & safety
+
+- **History panel** (P4): a named undo list ("Moved Question 3", "Changed marks 1.2 → 4"); click
+  any entry to go back.
+- **Undo toast** after deletes (P1): "Question 4 deleted · Undo".
+- Autosave status, offline buffer and version history (P1/P4).
+- **Paper check** and **Alignment check** (P3/P5) catch mistakes before printing.
+
+### 8.7 Learnability
+
+- A first-run **guided tour** and a template picker for an empty document (P4).
+- **Tooltips** show the keyboard shortcut for every button (P1).
+- Contextual **floating toolbar**; right-click menus on everything (P1).
+- **Touch**:
+  - long-press opens the context menu
+  - larger handles on touch screens
+  - Arrange mode for safe dragging (P3)
+
+### 8.8 Moderation (P6)
+
+- Comments pinned to questions or to a spot on the page.
+- Moderator suggestions that the teacher can accept or reject.
+- A sign-off stamp with name and date. The paper is locked once it is marked final.
+
+---
+
+## 9. Backend
+
+### 9.1 Database schema (PostgreSQL)
 
 ```sql
 users (
@@ -362,7 +650,7 @@ On sign-up, a `personal` organisation is created automatically. Every resource b
 `org_id`, so adding schools later means creating a `school` org and inviting members. No migration
 of ownership is needed.
 
-### 7.2 API routes (`/api/v1`)
+### 9.2 API routes (`/api/v1`)
 
 | Area | Routes |
 |---|---|
@@ -379,7 +667,7 @@ of ownership is needed.
 All request and response bodies are defined as zod schemas in `packages/shared/api`. The web
 client is generated from the same schemas, so a contract mismatch is a compile error.
 
-### 7.3 Saving strategy
+### 9.3 Saving strategy
 
 1. Every editor change → debounced save (1.5 s idle) via `PUT /content` with `baseRevision`.
 2. Before the request, the latest doc is written to **IndexedDB**. It is cleared on success, so a
@@ -394,7 +682,7 @@ client is generated from the same schemas, so a contract mismatch is a compile e
    - Retention: keep all named snapshots and the last 50 automatic ones.
 5. Status indicator: *Saving… / Saved / Offline — changes kept on this device*.
 
-### 7.4 Exports
+### 9.4 Exports
 
 - **PDF**:
   1. Worker requests a render token
@@ -415,7 +703,7 @@ client is generated from the same schemas, so a contract mismatch is a compile e
 - Exports are cached per `(document, revision, format, variant)`, so a re-export of an unchanged
   document is instant.
 
-### 7.5 Security
+### 9.5 Security
 
 - Passwords: **argon2id**; minimum length 10; checked against a breached-password list.
 - Sessions:
@@ -440,7 +728,7 @@ client is generated from the same schemas, so a contract mismatch is a compile e
 
 ---
 
-## 8. Testing & quality
+## 10. Testing & quality
 
 | Level | What |
 |---|---|
@@ -448,14 +736,17 @@ client is generated from the same schemas, so a contract mismatch is a compile e
 | API integration | Each route against a real Postgres (Testcontainers), auth flows, 409 conflicts |
 | Editor | Command tests: Tab/Shift-Tab nesting, paste conversion, marks shortcut |
 | E2E (Playwright) | Create paper from template → edit → autosave → reload → export PDF/DOCX |
+| Geometry | Snapping, alignment, distribution and Tidy up as pure functions with fixture layouts |
+| Interaction (Playwright) | Drag, resize, rotate, marquee, nudge, snap toggles, Write/Arrange mode on desktop and tablet viewports |
 | Visual | Snapshot of rendered PDF pages for fixtures; editor page breaks vs. PDF page breaks |
 | CI | Lint, typecheck, unit, integration, e2e on every PR |
 
 ---
 
-## 9. Delivery phases
+## 11. Delivery phases
 
-Each phase ends in something usable. Acceptance criteria in **bold**.
+Each phase ends in something usable. Acceptance criteria in **bold**. Feature tags (P1)–(P6) in
+section 8 refer to these phases.
 
 ### Phase 0 — Foundations
 - pnpm monorepo, shared configs, Docker Compose (Postgres, Redis, MinIO, Mailpit)
@@ -467,50 +758,81 @@ Each phase ends in something usable. Acceptance criteria in **bold**.
 - TipTap setup; nodes: paragraph, heading, lists, table, image, `question`, `questionPart`,
   `mcq`, `trueFalse`, `answerLines`, `answerBox`, `section`, `instructions`
 - Numbering and marks engine in `shared`, rendered via decorations
-- Ribbon (Home, Insert, Questions), slash menu, Inspector, Outline, shortcuts, smart Tab/Enter
+- Ribbon (Home, Insert, Questions), slash menu, command palette, type-to-format shortcuts,
+  floating toolbar, Inspector, Outline, smart Tab/Enter
+- Block drag-and-drop with drop indicators; undo toast after deletes
+- Basic documents API and autosave with the IndexedDB buffer, so work is never lost from day one
 - **A teacher can type a 3-question CAPS paper with sub-questions using the keyboard only;
-  numbering and totals are always correct after reordering.**
+  numbering and totals are always correct after reordering; closing the tab loses nothing.**
 
-### Phase 2 — Pages & export
-- Pagination plugin, Layout tab (margins, header/footer, page numbers), `coverPage`
+### Phase 2 — Pages, styles & export
+- Pagination plugin, `coverPage`, page control per question (keep together, new page)
+- Layout tab: margins, header/footer, page numbers, CAPS print conventions
+- Named styles, format painter, find & replace
 - Render route, PDF worker, DOCX exporter, print
 - **The PDF and print output match the on-screen pages; the DOCX opens cleanly in Word with marks
   aligned at the right margin.**
 
-### Phase 3 — Saving & dashboard
-- Documents API, autosave with IndexedDB buffer, conflict handling, version history UI
+### Phase 3 — Layout & arrangement
+- Geometry and snapping engine in `shared` (unit-tested first)
+- Rulers with draggable margins, indent markers and tab stops; ruler guides and ready-made guides
+- `floatingObject` (text box, image, shape) with block/page/every-page anchors and
+  in front / behind / top & bottom wrap
+- `layoutRow` side-by-side blocks with snapping column widths
+- Moveable + Selecto overlay: move, resize, rotate, marquee multi-select, group, lock, z-order,
+  arrow-key nudging
+- Snap toggles (margins, centre, grid, guides, objects, equal spacing, text lines, columns),
+  distance labels, `Alt` to bypass
+- Arrange tab: align, align to selection/margins/page, distribute, match size, position presets
+- Write / Arrange mode
+- Alignment check panel, edge map, Fix and Tidy up
+- Density slider, fit to N pages, automatic answer space, print preview, low-ink variant, copies
+  calculator
+- Floating objects in PDF and DOCX export
+- **A teacher can place a labelled diagram beside a question, drag three text boxes into perfect
+  alignment using only snapping, and get exactly that layout in the PDF and the DOCX. Alignment
+  check reports zero issues on the built-in templates.**
+
+### Phase 4 — Dashboard, history & diagrams
 - Dashboard: list, search, filter, duplicate, trash
+- Version history UI, named snapshots, History panel, conflict handling
 - Org settings: logo, school name, default cover page
 - Built-in templates: Test, Exam, Assignment, Worksheet, Homework
-- **Closing the tab mid-edit loses nothing; any earlier version can be restored.**
+- Label tool, shapes and arrows, image crop/rotate/flip
+- First-run tour and template picker
+- **Any earlier version can be restored; a teacher can label a diagram (A–D) in under a minute.**
 
-### Phase 4 — Teacher power tools
+### Phase 5 — Teacher power tools
 - `memo` node, Student ↔ Memo mode, memo export
 - Cognitive-level tagging, analysis grid, Paper check panel
-- Question bank (save, search, insert), user templates
-- `matchColumns`, `fillBlank`, `textPassage`, maths (KaTeX/MathLive), grid space
-- **One document produces both the question paper and the memo; the cognitive grid matches a
-  hand-calculated example.**
+- Question bank (save, search, insert), user templates, bulk edit in Outline
+- Import existing .docx papers
+- `matchColumns`, `fillBlank`, `textPassage`, maths (KaTeX/MathLive), grid space, generators
+- Variants: answer sheet, large print, dyslexia-friendly; square text wrap
+- **One document produces the question paper, memo, answer sheet and large-print version; the
+  cognitive grid matches a hand-calculated example.**
 
-### Phase 5 — Schools
+### Phase 6 — Schools & moderation
 - School organisations, invites, roles, shared bank and templates
-- Document sharing (view/comment/edit) and moderation workflow (draft → moderated → final)
-- Version A/B (shuffle questions or options)
+- Sharing (view/comment/edit), comments, moderator suggestions, sign-off, final lock
+- Version A/B, booklet and 2-up printing
 - Later: real-time co-editing (Yjs + Hocuspocus)
-- **A head of department can create a school, invite teachers and see shared papers.**
+- **A head of department can create a school, invite teachers, moderate a paper and sign it
+  off.**
 
 ---
 
-## 10. Migration from the prototype
+## 12. Migration from the prototype
 
-- Build on a new branch (`rebuild`); the current app stays on `main` until Phase 3 is complete.
+- Build on a new branch (`rebuild`); the current app stays on `main` until Phase 2 is complete (the new app can then save, print and
+  export).
 - Reuse: Tailwind theme tokens, shadcn components, template content ideas.
 - Discard: the component-list store, `PageCanvas` renderers, and the duplicate print CSS.
 - Prototype documents are not persisted anywhere, so no data migration is needed.
 
 ---
 
-## 11. Risks & mitigations
+## 13. Risks & mitigations
 
 | Risk | Mitigation |
 |---|---|
@@ -519,11 +841,16 @@ Each phase ends in something usable. Acceptance criteria in **bold**.
 | DOCX fidelity (maths, complex tables) | Phase 2 covers core nodes; maths via MathML→OMML in Phase 4; document known limits |
 | Chromium in production is heavy | Separate worker container, concurrency limit, export cache |
 | Building our own auth | Small surface, well-tested library primitives (argon2, crypto), rate limiting, security review before launch |
+| Free positioning conflicts with reflowing content | Numbered content always stays in the flow; floating objects anchor to a block by default, so they move with their question; clear rules for deleted anchors and missing pages |
+| Text wrap around floating objects is hard in a flow editor | v1 supports in front / behind / top & bottom only; square wrap comes in Phase 5, behind visual tests |
+| Dragging vs. selecting text on tablets | Write / Arrange modes; larger touch handles; long-press menus |
+| Snapping feels jumpy or slow on long papers | Zoom-independent threshold, snap targets limited to nearby pages with a spatial index, `Alt` to bypass; performance budget of 60 fps tested in CI |
+| "Fit to N pages" gives odd results | Bounded adjustments within teacher-set limits, preview before apply, always one undo step |
 | Scope creep | Phase acceptance criteria are the gate; nice-to-haves go to a backlog |
 
 ---
 
-## 12. Open questions
+## 14. Open questions
 
 1. **Product name and domain**: keep "Teacher Paper Builder"?
 2. **Hosting**: South African region (for POPIA and latency), or EU with a POPIA-compliant
